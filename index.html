@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스케줄러</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.10.2/fullcalendar.min.css">
+</head>
+<body>
+
+    <div class="container mt-5">
+        <div id="calendar"></div>
+    </div>
+
+    <!-- 이벤트 추가/수정 모달 창 -->
+    <div class="modal" id="eventModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">이벤트 상세 정보</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="eventForm">
+                        <div class="form-group">
+                            <label for="eventTitle">제목</label>
+                            <input type="text" class="form-control" id="eventTitle" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="eventStart">시작 시간</label>
+                            <input type="datetime-local" class="form-control" id="eventStart" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="eventEnd">종료 시간</label>
+                            <input type="datetime-local" class="form-control" id="eventEnd" required>
+                        </div>
+                        <button type="button" class="btn btn-primary" id="saveEventBtn">저장</button>
+                        <button type="button" class="btn btn-danger" id="deleteEventBtn">삭제</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.10.2/fullcalendar.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            // 이벤트를 쿠키에서 로드
+            var savedEvents = getCookie('savedEvents');
+            var events = savedEvents ? JSON.parse(savedEvents) : [];
+
+            var calendar = $('#calendar').fullCalendar({
+                header: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'month,agendaWeek,agendaDay'
+                },
+                events: events, // 저장된 이벤트 로드
+                selectable: true,
+                selectHelper: true,
+                select: function (start, end) {
+                    $('#eventModal').modal('show');
+                    $('#eventTitle').val('');
+                    $('#eventStart').val(moment(start).format('YYYY-MM-DD[T]HH:mm'));
+                    $('#eventEnd').val(moment(start).format('YYYY-MM-DD[T]HH:mm'));
+                    $('#eventModal').data('event-id', null);
+                },
+                editable: true,
+                eventClick: function (event) {
+                    $('#eventModal').modal('show');
+                    $('#eventTitle').val(event.title);
+                    $('#eventStart').val(moment(event.start).format('YYYY-MM-DD[T]HH:mm'));
+                    $('#eventEnd').val(moment(event.end).format('YYYY-MM-DD[T]HH:mm'));
+                    $('#eventModal').data('event-id', event._id);
+                }
+            });
+
+            $('#saveEventBtn').click(function () {
+                var title = $('#eventTitle').val();
+                var start = $('#eventStart').val();
+                var end = $('#eventEnd').val();
+
+                if (title && start && end) {
+                    var eventData = {
+                        title: title,
+                        start: start,
+                        end: end,
+                        allDay: false
+                    };
+
+                    var eventId = $('#eventModal').data('event-id');
+
+                    if (eventId) {
+                        // 수정 모드
+                        var selectedEvent = calendar.fullCalendar('clientEvents', eventId);
+                        selectedEvent[0].title = eventData.title;
+                        selectedEvent[0].start = eventData.start;
+                        selectedEvent[0].end = eventData.end;
+                        calendar.fullCalendar('updateEvent', selectedEvent[0]);
+                    } else {
+                        // 추가 모드
+                        calendar.fullCalendar('renderEvent', eventData, true);
+                        events.push(eventData);
+                    }
+
+                    // 쿠키에 이벤트 저장
+                    setCookie('savedEvents', JSON.stringify(events), 7);
+
+                    $('#eventModal').modal('hide');
+                    $('#eventTitle').val('');
+                }
+            });
+
+            $('#deleteEventBtn').click(function () {
+                var deleteEvent = confirm('이벤트를 삭제하시겠습니까?');
+                if (deleteEvent) {
+                    var eventId = $('#eventModal').data('event-id');
+                    if (eventId) {
+                        calendar.fullCalendar('removeEvents', eventId);
+
+                        // 쿠키에서 이벤트 제거
+                        events = events.filter(function (event) {
+                            return event._id !== eventId;
+                        });
+                        setCookie('savedEvents', JSON.stringify(events), 7);
+
+                        $('#eventModal').modal('hide');
+                    }
+                }
+            });
+
+            // 쿠키에 저장
+            function setCookie(name, value, days) {
+                var expires = '';
+                if (days) {
+                    var date = new Date();
+                    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                    expires = '; expires=' + date.toUTCString();
+                }
+                document.cookie = name + '=' + (value || '') + expires + '; path=/';
+            }
+
+            // 쿠키에서 가져오기
+            function getCookie(name) {
+                var nameEQ = name + '=';
+                var ca = document.cookie.split(';');
+                for (var i = 0; i < ca.length; i++) {
+                    var c = ca[i];
+                    while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+                    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+                }
+                return null;
+            }
+        });
+    </script>
+
+</body>
+</html>
